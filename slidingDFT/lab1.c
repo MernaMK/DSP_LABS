@@ -12,6 +12,8 @@
 #include "include/dsk6416_led.h"
 #include "include/dsk6416_dip.h"
 
+#define N_DFT 128
+
 /* Codec configuration settings */
 DSK6416_AIC23_Config config = {
     0x0017, /* 0 DSK6416_AIC23_LEFTINVOL  Left line input channel volume */
@@ -29,6 +31,9 @@ DSK6416_AIC23_Config config = {
 short R_in[128]; /* Input samples R_in[0] most recent, R_in[127] oldest */
 float R_DFT_real[128];
 float R_DFT_img[128];
+
+float W_real[128]; /* Initialize the rotation factor */
+float W_img[128];
 
 void DFT(void)
 {
@@ -48,9 +53,41 @@ void DFT(void)
 		R_DFT_img[k]=tempImg;
     }
 }
+
+void set_up(void)
+{
+ for (int i = 0; i < N_DFT; i++)
+    {
+        W_real[i] = cosf(2.0f * 3.14159265358979f * (float)i / (float)N_DFT);
+        W_img[i] = sinf(2.0f * 3.14159265358979f * (float)i / (float)N_DFT);
+    }
+}
+
 short slidingDFT(short input)
 {
-   
+	int k;
+    float oldest, tempReal, tempImg;
+ 
+    /* sample leaving the window, then shift in the new one */
+    oldest = (float)R_in[N_DFT - 1];
+    for (k = N_DFT - 1; k > 0; k--)
+    {
+        R_in[k] = R_in[k - 1];
+	}
+
+    R_in[0] = input;
+ 
+    for (k = 0; k < N_DFT; k++)
+    {
+        tempReal = R_DFT_real[k] - oldest + (float)input;
+        tempImg = R_DFT_img[k];
+ 
+        /* complex multiply by (W_real + j*W_img) */
+        R_DFT_real[k] = tempReal * W_real[k] - tempImg * W_img[k];
+        R_DFT_img[k] = tempReal * W_img[k] + tempImg * W_real[k];
+    }
+ 
+    return 0; /* result is stored in R_DFT_real / R_DFT_img */ 
 }
 
 short dominantFreq(void)
