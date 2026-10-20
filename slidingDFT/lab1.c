@@ -4,6 +4,8 @@
 // #include "C6416_DSK_FIRcfg.h"
 #define CHIP_6416 1
 
+#define N_DFT 128
+
 #include <math.h>
 
 #include <csl.h>
@@ -11,8 +13,6 @@
 #include "include/dsk6416_aic23.h"
 #include "include/dsk6416_led.h"
 #include "include/dsk6416_dip.h"
-
-#define N_DFT 128
 
 /* Codec configuration settings */
 DSK6416_AIC23_Config config = {
@@ -29,23 +29,29 @@ DSK6416_AIC23_Config config = {
 };
 
 short R_in[128]; /* Input samples R_in[0] most recent, R_in[127] oldest */
-float R_DFT_real[128];
-float R_DFT_img[128];
+
+float R_DFT_real[128];//real part of X(k)
+float R_DFT_img[128];//imaginary part of X(k)
+
 
 float W_real[128]; /* Initialize the rotation factor */
 float W_img[128];
-
 void DFT(void)
 {
-	float tempReal,tempImg;
+	float tempReal,tempImg;//accumelators
+
 	int k,n;
-	for ( k = 0; k < 128; k++) /* 128 taps */
+
+	for ( k = 0; k < 128; k++) //loop to get the DFT of each bin(k)
     {
 		tempReal=0.0f;
 		tempImg=0.0f;
-		for ( n = 0; n < 128; n++)
+
+		for ( n = 0; n < 128; n++)//loop to perform summation(segma)
 		{
-			float angle = 2.0f * 3.14159265358979f * (float)n * (float)k /128.0f;
+			float angle = 2.0f * 3.14159265358979f * (float)n * (float)k /128.0f;// 2*pi*n*k/N
+
+			// x(n) * ( cos(angle) - j sin (angle) )
 			tempReal +=R_in[n] * cosf(angle);
         	tempImg -= R_in[n] * sinf(angle);
     	}
@@ -53,7 +59,6 @@ void DFT(void)
 		R_DFT_img[k]=tempImg;
     }
 }
-
 void set_up(void) // function to build the rotation factor exp(j2pik/N)
 {
  int i = 0;
@@ -137,72 +142,78 @@ short dominantFreq(void)
     return (short)dominant_bin;
 }
 
-
-void main()
+void main(void)
 {
-  DSK6416_AIC23_CodecHandle hCodec;
-  Int16 OUT_L, OUT_R;
-  Uint32 IN_L, IN_R;
-  /*	Uint32 b0;
-    Uint32 b1;
-    Uint32 b2;
-    Uint32 b3;*/
+DSK6416_AIC23_CodecHandle hCodec;
+Int16 OUT_L, OUT_R;
+Uint32 IN_L, IN_R;
 
-  /* Initialize the board support library, must be called first */
-  DSK6416_init();
-  DSK6416_LED_init();
-  DSK6416_DIP_init();
+// Initialize the board
+DSK6416_init();
+DSK6416_LED_init();
+DSK6416_DIP_init();
 
-  /* Start the codec */
-  hCodec = DSK6416_AIC23_openCodec(0, &config);
+// Initialize DFT coefficients
+set_up();
 
-  // Set codec frequency to 48KHz (44kHz does not seem to work!)
-  DSK6416_AIC23_setFreq(hCodec, DSK6416_AIC23_FREQ_48KHZ);
-  DSK6416_LED_off(0);
-  DSK6416_LED_off(1);
-  DSK6416_LED_off(2);
-  DSK6416_LED_off(3);
+// Open the audio codec
+hCodec = DSK6416_AIC23_openCodec(0, &config);
+DSK6416_AIC23_setFreq(hCodec, DSK6416_AIC23_FREQ_48KHZ);
 
-  while (1)
-  {
+// Turn off all LEDs
+DSK6416_LED_off(0);
+DSK6416_LED_off(1);
+DSK6416_LED_off(2);
+DSK6416_LED_off(3);
 
-    // Read sample from the left channel
-    while (!DSK6416_AIC23_read(hCodec, &IN_L))
-      ;
+while (1)
+{
+// Read audio samples
+while (!DSK6416_AIC23_read(hCodec, &IN_L))
+;
 
-    // Read sample from the right channel
-    while (!DSK6416_AIC23_read(hCodec, &IN_R))
-      ;
+while (!DSK6416_AIC23_read(hCodec, &IN_R))
+;
 
-    if ((DSK6416_DIP_get(0) == 0))
-    {
-      DSK6416_LED_on(0);
-    }
-    else if ((DSK6416_DIP_get(1) == 0))
-    {
+// DIP switch 0: Pass-through mode
+if (DSK6416_DIP_get(0) == 0)
+{
+OUT_L = (Int16)IN_L;
+OUT_R = (Int16)IN_R;
 
-      DSK6416_LED_on(1);
-    }
-    else if ((DSK6416_DIP_get(2) == 0))
-    {
+// Turn off all LEDs
+DSK6416_LED_off(0);
+DSK6416_LED_off(1);
+DSK6416_LED_off(2);
+DSK6416_LED_off(3);
+}
+// DIP switch 1: DFT analysis mode
+else if (DSK6416_DIP_get(1) == 0)
+{
+// Update DFT and find the dominant frequency
+slidingDFT((short)IN_L);
+dominantFreq();
 
-      DSK6416_LED_on(2);
-    }
-    else if ((DSK6416_DIP_get(3) == 0))
-    {
+// Send the original audio to the output
+OUT_L = (Int16)IN_L;
+OUT_R = (Int16)IN_R;
+}
+else
+{
+// Mute the audio when no switch is pressed
+OUT_L = 0;
+OUT_R = 0;
 
-      DSK6416_LED_on(3);
-    }
+// Turn off all LEDs
+DSK6416_LED_off(0);
+DSK6416_LED_off(1);
+DSK6416_LED_off(2);
+DSK6416_LED_off(3);
+}
 
-    /* Send the FILTERED sample to the left channel */
-    while (!DSK6416_AIC23_write(hCodec, OUT_L))
-      ;
+// Write samples to the audio output
+while (!DSK6416_AIC23_write(hCodec, OUT_L));
 
-    /* Send a NON FILTERED sample to the right channel */
-    while (!DSK6416_AIC23_write(hCodec, OUT_R))
-      ;
-  }
-
-  /* Close the codec */
-  DSK6416_AIC23_closeCodec(hCodec);
+while (!DSK6416_AIC23_write(hCodec, OUT_R));
+}
 }
