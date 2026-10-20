@@ -55,7 +55,48 @@ short slidingDFT(short input)
 
 short dominantFreq(void)
 {
+    int k;
+    int dominant_bin = 0;
+    float max_mag = -1.0f;
 
+    // Search through the positive frequency bins (0 to N/2)
+    for (k = 0; k < (128 / 2); k++)
+    {
+        // Compute magnitude squared: |X(k)|^2 = real^2 + imag^2
+        float mag_sq = (R_DFT_real[k] * R_DFT_real[k]) + (R_DFT_img[k] * R_DFT_img[k]);
+        
+        if (mag_sq > max_mag)
+        {
+            max_mag = mag_sq;
+            dominant_bin = k;
+        }
+    }
+
+    // Turn off all LEDs first
+    DSK6416_LED_off(0);
+    DSK6416_LED_off(1);
+    DSK6416_LED_off(2);
+    DSK6416_LED_off(3);
+
+    // Map the dominant bin range to the 4 LEDs on the DSK6416 board
+    if (dominant_bin < 16)
+    {
+        DSK6416_LED_on(0);
+    }
+    else if (dominant_bin < 32)
+    {
+        DSK6416_LED_on(1);
+    }
+    else if (dominant_bin < 48)
+    {
+        DSK6416_LED_on(2);
+    }
+    else
+    {
+        DSK6416_LED_on(3);
+    }
+
+    return (short)dominant_bin;
 }
 
 
