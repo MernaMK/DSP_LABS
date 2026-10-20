@@ -54,19 +54,20 @@ void DFT(void)
     }
 }
 
-void set_up(void)
+void set_up(void) // function to build the rotation factor exp(j2pik/N)
 {
- for (int i = 0; i < N_DFT; i++)
+ int i = 0;
+ for ( i = 0; i < N_DFT; i++)
     {
         W_real[i] = cosf(2.0f * 3.14159265358979f * (float)i / (float)N_DFT);
         W_img[i] = sinf(2.0f * 3.14159265358979f * (float)i / (float)N_DFT);
     }
 }
 
-short slidingDFT(short input)
+short slidingDFT(short input) 
 {
 	int k;
-    float oldest, tempReal, tempImg;
+    float oldest, tempReal, tempImg; // oldest to store the oldest value for each slide
  
     /* sample leaving the window, then shift in the new one */
     oldest = (float)R_in[N_DFT - 1];
@@ -75,15 +76,15 @@ short slidingDFT(short input)
         R_in[k] = R_in[k - 1];
 	}
 
-    R_in[0] = input;
+    R_in[0] = input; // the input is the newst R_in
  
     for (k = 0; k < N_DFT; k++)
     {
-        tempReal = R_DFT_real[k] - oldest + (float)input;
+        tempReal = R_DFT_real[k] - oldest + (float)input;  // compute thee sliding summation function
         tempImg = R_DFT_img[k];
  
         /* complex multiply by (W_real + j*W_img) */
-        R_DFT_real[k] = tempReal * W_real[k] - tempImg * W_img[k];
+        R_DFT_real[k] = tempReal * W_real[k] - tempImg * W_img[k]; 
         R_DFT_img[k] = tempReal * W_img[k] + tempImg * W_real[k];
     }
  
